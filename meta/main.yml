@@ -1,3 +1,4 @@
+---
 galaxy_info:
   author: vsylvest
   description: "runs cis compliance benchmark scan on rhel 7"

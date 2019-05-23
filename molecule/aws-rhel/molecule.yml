@@ -1,0 +1,46 @@
+---
+driver:
+  name: ec2
+  ssh_connection_options:
+    - -o ControlPersist=30m
+
+lint:
+  name: yamllint
+  options:
+    config-file: .yamllint
+
+platforms:
+  - name: rhel7-aws
+    image: ami-67589505 
+    instance_type: t2.medium
+    ssh_user: ec2-user
+    vpc_subnet_id: subnet-0225e0134a4367180
+    region: ap-southeast-2
+    security_group_vpc: ${STIG_CI_AWS_VPC_ID}
+
+
+provisioner:
+  name: ansible
+  log: true
+  lint:
+    name: ansible-lint
+  config_options:
+    defaults:
+      remote_tmp: /tmp/.ansible
+      retry_files_enabled: false
+
+scenario:
+  name: aws-rhel
+  test_sequence:
+    - lint
+    - destroy
+    - syntax
+    - create
+    - converge
+    # - idempotence # Current bug with lineinfile module
+    - destroy
+verifier:
+  name: testinfra
+  lint:
+    name: flake8
+    enabled: false

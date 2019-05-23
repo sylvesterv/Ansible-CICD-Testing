@@ -1,0 +1,95 @@
+- name: Create RHEL VM on aws
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  no_log: "{{ not (lookup('env', 'MOLECULE_DEBUG') | bool or molecule_yml.provisioner.log|default(false) | bool) }}"
+  vars:
+    ssh_user: ec2-user
+    ssh_port: 22
+    vm_count: 1
+    security_group: 'sg-0e9563c812e6b53fc'
+    subnet_id: 'subnet-0225e0134a4367180'
+    keypair_name: 'molecule-rhel-key'
+    instance_size: 't2.micro'
+    instance_tag: 'molecule-rhel'
+    keypair_path: "{{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/ssh_key"
+    ami: 'ami-67589505'
+    region: 'ap-southeast-2' 
+  tasks:
+
+  - name: Create keypair
+    ec2_key:
+      name: "{{ keypair_name }}"
+    register: keypair
+
+  - name: Persist the keypair
+    copy:
+      dest: "{{ keypair_path }}"
+      content: "{{ keypair.key.private_key }}"
+      mode: 0600
+    when: keypair.changed
+
+
+  - name: Create RHEL instance in ec2
+    ec2_instance:
+      name: "{{ instance_tag }}"
+      key_name: "{{ keypair_name }}"
+      vpc_subnet_id: "{{ subnet_id }}"
+      instance_type: "{{ instance_size }}"
+      security_group: "{{ security_group }}"
+      network:
+        assign_public_ip: true
+      image_id: "{{ ami }}"
+      wait: yes
+      tags:
+        env: "{{ instance_tag }}"
+    register: server
+
+
+  - name: Wait for instance(s) creation to complete
+    async_status:
+      jid: "{{ item.ansible_job_id }}"
+    register: ec2_jobs
+    until: ec2_jobs.finished
+    retries: 300
+    loop: "{{ server.results }}"
+
+  # Mandatory configuration for Molecule to function.
+  - name: Populate instance config dict
+    set_fact:
+      instance_conf_dict: {
+        'instance': "{{ item[0].tagged_instances[0].tags.instance }}",
+        'address': "{{ item[0].tagged_instances[0].public_ip }}",
+        'region': "{{ item[0].tagged_instances[0].region }}",
+        'user': "{{ item[1].ssh_user }}",
+        'port': "{{ ssh_port }}",
+        'identity_file': "{{ keypair_path }}",
+        'instance_ids': "{{ item[0].tagged_instances[0].id }}"
+      }
+    loop: "{{ query('together', ec2_jobs.results, molecule_yml.platforms, wanttlist=True) }}"
+    register: instance_config_dict
+    when: server.changed | bool
+
+  - name: Convert instance config dict to a list
+    set_fact:
+      instance_conf: "{{ instance_config_dict.results | map(attribute='ansible_facts.instance_conf_dict') | list }}"
+    when: server.changed | bool
+
+  - name: Dump instance config
+    copy:
+      content: "{{ instance_conf | to_json | from_json | molecule_to_yaml | molecule_header }}"
+      dest: "{{ molecule_instance_config }}"
+    when: server.changed | bool
+
+  - name: Wait for SSH
+    wait_for:
+      port: "{{ ssh_port }}"
+      host: "{{ item.address }}"
+      search_regex: SSH
+      delay: 10
+      timeout: 320
+    loop: "{{ lookup('file', molecule_instance_config) | molecule_from_yaml }}"
+
+  - name: Wait for boot process to finish
+    pause:
+      minutes: 4

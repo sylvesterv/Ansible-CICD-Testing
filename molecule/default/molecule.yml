@@ -6,8 +6,9 @@ driver:
 lint:
   name: yamllint
 platforms:
-  - name: instance
-    image: rhel:7
+  - name: Red Hat Enterprise Linux 7
+    image: bluedata/rhel7
+    privileged: true
 provisioner:
   name: ansible
   lint:

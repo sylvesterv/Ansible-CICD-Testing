@@ -1,0 +1,36 @@
+- name: Create RHEL VM on aws
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  no_log: "{{ not (lookup('env', 'MOLECULE_DEBUG') | bool or molecule_yml.provisioner.log|default(false) | bool) }}"
+  vars:
+    ssh_user: ec2-user
+    ssh_port: 22
+    vm_count: 1
+    security_group: 'sg-0e9563c812e6b53fc'
+    subnet_id: 'subnet-0225e0134a4367180'
+    keypair_name: 'molecule-rhel-key'
+    instance_size: 't2.micro'
+    instance_tag: 'molecule-rhel'
+    keypair_path: "{{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/ssh_key"
+    ami: 'ami-67589505'
+    region: 'ap-southeast-2' 
+  tasks:
+  - name: Enumerate all tagged instances in ec2
+    ec2_instance_facts:
+      region: 'ap-southeast-2'
+      filters:
+        "tag:env": "{{ instance_tag }}" 
+    register: vmfacts 
+
+
+  - debug: msg="{{ item.instance_id }}"
+    with_items: '{{ vmfacts.instances }}'
+
+
+  - name: Delete ami instance in ec2
+    ec2_instance:
+      region: 'ap-southeast-2'
+      state: absent
+      instance_ids: '{{ item.instance_id }}'
+    with_items: '{{ vmfacts.instances }}'
