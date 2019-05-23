@@ -31,28 +31,28 @@
 
 
   - name: Create RHEL instance in ec2
-    ec2_instance:
-      name: "{{ instance_tag }}"
-      key_name: "{{ keypair_name }}"
-      vpc_subnet_id: "{{ subnet_id }}"
+    ec2:
+      image: "{{ rhel_ami_name }}"
       instance_type: "{{ instance_size }}"
-      security_group: "{{ security_group }}"
-      network:
-        assign_public_ip: true
-      image_id: "{{ ami }}"
-      wait: yes
-      tags:
-        env: "{{ instance_tag }}"
-    register: server
+      key_name: "{{ ssh_key_name }}"
+      region: "{{ region }}"
+      wait: true
+      count: "{{ vm_count|int }}"
+      instance_tags: "{'Name':'{{ instance_tag }}',  'group':'{{ security_group }}'}"
+      vpc_subnet_id: "{{ subnet_id }}"
+      assign_public_ip: yes
+      group_id: "{{ security_group }}"  
+    register: ec2r
 
 
-  - name: Wait for instance(s) creation to complete
-    async_status:
-      jid: "{{ item.ansible_job_id }}"
-    register: ec2_jobs
-    until: ec2_jobs.finished
-    retries: 300
-    loop: "{{ server.results }}"
+  - name: Wait for SSH to come up
+    wait_for:
+      host: "{{ item.public_dns_name }}"
+      port: 22
+      delay: 60
+      timeout: 320
+      state: started
+    with_items: "{{ ec2r.instances }}"
 
   # Mandatory configuration for Molecule to function.
   - name: Populate instance config dict
@@ -68,18 +68,18 @@
       }
     loop: "{{ query('together', ec2_jobs.results, molecule_yml.platforms, wanttlist=True) }}"
     register: instance_config_dict
-    when: server.changed | bool
+    when: ec2r.changed | bool
 
   - name: Convert instance config dict to a list
     set_fact:
       instance_conf: "{{ instance_config_dict.results | map(attribute='ansible_facts.instance_conf_dict') | list }}"
-    when: server.changed | bool
+    when: ec2r.changed | bool
 
   - name: Dump instance config
     copy:
       content: "{{ instance_conf | to_json | from_json | molecule_to_yaml | molecule_header }}"
       dest: "{{ molecule_instance_config }}"
-    when: server.changed | bool
+    when: ec2r.changed | bool
 
   - name: Wait for SSH
     wait_for:
