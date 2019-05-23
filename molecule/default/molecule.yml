@@ -7,12 +7,8 @@ lint:
   name: yamllint
 platforms:
   - name: instance
-    image: centos:7
+    image: rhel:7
 provisioner:
   name: ansible
   lint:
     name: ansible-lint
-verifier:
-  name: testinfra
-  lint:
-    name: flake8
