@@ -1,40 +1,46 @@
-scenario:
-  name: aws 
- 
+---
 driver:
   name: ec2
-platforms:
-  - name: rhel7-aws
-    image: ami-67589505 
-    instance_type: t2.medium
-    ssh_user: ec2-user
-    vpc_subnet_id: subnet-0225e0134a4367180
-    region: ap-southeast-2
-    security_group_vpc: ${STIG_CI_AWS_VPC_ID}
- 
-provisioner:
-  name: ansible
-  lint:
-    name: ansible-lint
-    enabled: false
-  playbooks:
-    create: create.yml
-    converge: playbook.yml
-    destroy: destroy.yml
- 
+  ssh_connection_options:
+    - -o ControlPersist=30m
+
 lint:
   name: yamllint
-  enabled: false
- 
+  options:
+    config-file: .yamllint
+
+platforms:
+  - name: ec2-rhel
+    image: ami-67589505
+    instance_type: t2.medium
+    ssh_user: ec2-user
+    vpc_subnet_id: subnet-8c474eeb
+    region: ap-southeast-2
+    security_group_vpc: ${STIG_CI_AWS_VPC_ID}
+
+
+provisioner:
+  name: ansible
+  log: true
+  lint:
+    name: ansible-lint
+  config_options:
+    defaults:
+      remote_tmp: /tmp/.ansible
+      retry_files_enabled: false
+
+scenario:
+  name: aws
+  test_sequence:
+    - lint
+    - destroy
+    - syntax
+    - create
+    - converge
+    - idempotence  #  Current bug with lineinfile module
+    - destroy
 verifier:
   name: testinfra
-  directory: ../tests/
-  env:
-    # get rid of the DeprecationWarning messages of third-party libs,
-    # see https://docs.pytest.org/en/latest/warnings.html#deprecationwarning-and-pendingdeprecationwarning
-    PYTHONWARNINGS: "ignore:.*U.*mode is deprecated:DeprecationWarning"
   lint:
     name: flake8
-  options:
-    # show which tests where executed in test output
-    v: 1
+    enabled: false

@@ -30,7 +30,8 @@
       state: present
 
 - name: "PRELIM | Check if prelink package is installed"
-  command: rpm -q prelink
+  yum:
+      list=*prelink*
   register: prelink_installed
   changed_when: no
   failed_when: no
@@ -39,7 +40,8 @@
       - skip_ansible_lint
 
 - name: "PRELIM | Check if postfix package is installed"
-  command: rpm -q postfix
+  yum:
+      list=*postfix*
   register: postfix_installed
   changed_when: no
   failed_when: no
