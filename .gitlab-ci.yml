@@ -16,6 +16,8 @@ before_script:
 
 molecule:
   stage: test
+  tags:
+    - security
   script:
     - docker -v
     - python -V
